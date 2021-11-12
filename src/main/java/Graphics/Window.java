@@ -61,7 +61,7 @@ public class Window {
 
       newFrame();
 
-      Menu.render();
+      //Menu.render();
 
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -150,7 +150,7 @@ public class Window {
     GL.createCapabilities();
 
     //Turn debug on
-    Callback debugProc = GLUtil.setupDebugMessageCallback();
+    //Callback debugProc = GLUtil.setupDebugMessageCallback();
 
     GUI.getInstance().setupWindow(windowPID);
     GLFWErrorCallback.createPrint(System.err).set();
