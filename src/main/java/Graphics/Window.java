@@ -2,14 +2,12 @@ package Graphics;
 import org.lwjgl.*;
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.*;
-import org.lwjgl.system.Callback;
-import org.lwjgl.system.MemoryStack;
 
-import java.nio.IntBuffer;
+import java.util.Objects;
+
 import static org.lwjgl.glfw.Callbacks.*;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.*;
 
 
@@ -26,8 +24,9 @@ public class Window {
   private boolean maximized = true;
   private String title = "Rafale|ETS";
   private GLFWVidMode vidmode;
-  private int width, height;
-  private int display_width, display_height;
+  private int[]  width= new int[1], height = new int[1];
+  private int[]  display_width, display_height;
+  private double[] mouseY=new double[1],mouseX=new double[1];
   private int fps;
 
   public Window(){
@@ -43,136 +42,108 @@ public class Window {
 
   private void loop() {
 
+    double time = 0; // to track our frame delta value
 
     while ( !glfwWindowShouldClose(windowPID) ){
 
-      try (MemoryStack stack = stackPush()) {
-        IntBuffer w = stack.mallocInt(1);
-        IntBuffer h = stack.mallocInt(1);
+      final double currentTime = glfwGetTime();
+      final double deltaTime = (time > 0) ? (currentTime - time) : 1f / 60f;
 
-        glfwGetWindowSize(windowPID, w, h);
-        width = w.get(0);
-        height = h.get(0);
+      time = currentTime;
 
-        glfwGetFramebufferSize(windowPID, w, h);
-        display_width = w.get(0);
-        display_height = h.get(0);
-      }
+      glClearColor(0, 0, 0, 0.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
 
-      newFrame();
+      glfwGetWindowSize(windowPID, display_width, display_height);
+      glfwGetFramebufferSize(windowPID, width, height);
+      glfwGetCursorPos(windowPID, mouseX, mouseY);
 
-      Menu.render();
+      GUI.update(display_width,display_height,width,height,mouseX,mouseY,deltaTime);
 
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-      GUI.getInstance().render();
-
-      glfwSwapBuffers(windowPID); // swap the color buffers
+      this.update();
     }
   }
 
   public void run() {
     System.out.println("Hello LWJGL " + Version.getVersion() + "!");
-    init();
-    loop();
 
-    // Free the window callbacks and destroy the window
+    this.init();
+    GUI.init();
+
+    this.loop();
+
+    GUI.destroy();
+    this.destroy();
+  }
+
+  private void destroy() {
     glfwFreeCallbacks(windowPID);
     glfwDestroyWindow(windowPID);
-
-    // Terminate GLFW and free the error callback
     glfwTerminate();
-    glfwSetErrorCallback(null).free();
+    Objects.requireNonNull(glfwSetErrorCallback(null)).free();
   }
 
   public void init() {
+
     // Setup an error callback. The default implementation
     // will print the error message in System.err.
-    //
-
-
-
+    GLFWErrorCallback.createPrint(System.err).set();
 
     // Initialize GLFW. Most GLFW functions will not work before doing this.
     if (!glfwInit()) {
       throw new IllegalStateException("Unable to initialize GLFW");
     }
 
+    // Configure GLFW
     glfwDefaultWindowHints(); // optional, the current window hints are already the default
-    glfwWindowHint(GLFW_VISIBLE, GL_FALSE); // the window will stay hidden after creation
-    glfwWindowHint(GLFW_RESIZABLE, GL_TRUE); // the window will be resizable
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // the window will stay hidden after creation
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // the window will be resizable
 
     vidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-    display_width = vidmode.width();
-    display_height = vidmode.height();
+    display_width = new int[] {vidmode.width()};
+    display_height = new int[] {vidmode.height()};
     fps = vidmode.refreshRate();
 
     // Create the window
-    windowPID = glfwCreateWindow(display_width, display_height, title, NULL, NULL);
+    windowPID = glfwCreateWindow(display_width[0], display_height[0], title,
+    NULL,
+    NULL);
     if (windowPID == NULL) {
       throw new RuntimeException("Failed to create the GLFW window");
     }
 
 
     glfwSetFramebufferSizeCallback(windowPID, (windowPID, width, height) -> {
-      this.width = width;
-      this.height = height;
+      this.width[0] = width;
+      this.height[0] = height;
       this.setResized(true);
     });
 
-    // Setup a key callback. It will be called every time a key is pressed, repeated or released.
-    glfwSetKeyCallback(windowPID, (windowPID, key, scancode, action, mods) -> {
-      if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) {
-        glfwSetWindowShouldClose(windowPID,
-        true); // We will detect this in the rendering loop
-      }
-    });
 
     if (maximized) {
       glfwMaximizeWindow(windowPID);
     }
 
+
+
     // Make the OpenGL context current
     glfwMakeContextCurrent(windowPID);
+
+    // Make the window visible
+    glfwShowWindow(windowPID);
+
+    // IMPORTANT!!
+    // This line is critical for LWJGL's interoperation with GLFW's
+    // OpenGL context, or any context that is managed externally.
+    // LWJGL detects the context that is current in the current thread,
+    // creates the GLCapabilities instance and makes the OpenGL
+    // bindings available for use.
+    GL.createCapabilities();
 
     if (isvSync()) {
       // Enable v-sync
       glfwSwapInterval(1);
     }
-
-    // Make the window visible
-    glfwShowWindow(windowPID);
-
-    GL.createCapabilities();
-
-    //Turn debug on
-    Callback debugProc = GLUtil.setupDebugMessageCallback();
-
-    GUI.getInstance().setupWindow(windowPID);
-    GLFWErrorCallback.createPrint(System.err).set();
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-  }
-
-  private void newFrame() {
-    try (MemoryStack stack = stackPush()) {
-      IntBuffer w = stack.mallocInt(1);
-      IntBuffer h = stack.mallocInt(1);
-
-      glfwGetWindowSize(windowPID, w, h);
-      width = w.get(0);
-      height = h.get(0);
-
-      glfwGetFramebufferSize(windowPID, w, h);
-      display_width = w.get(0);
-      display_height = h.get(0);
-    }
-
-    GUI.getInstance().input(windowPID);
-    glfwPollEvents();
 
   }
 
@@ -205,19 +176,19 @@ public class Window {
   }
 
   public int getWidth() {
-    return width;
+    return width[0];
   }
 
   public int getHeight() {
-    return height;
+    return height[0];
   }
 
   public int getDisplay_Width() {
-    return display_width;
+    return display_width[0];
   }
 
   public int getDisplay_Height() {
-    return display_height;
+    return display_height[0];
   }
 
   public boolean isResized() {

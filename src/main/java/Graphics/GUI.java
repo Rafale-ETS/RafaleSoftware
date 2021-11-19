@@ -1,410 +1,244 @@
 package Graphics;
-import org.lwjgl.nuklear.*;
-import org.lwjgl.system.*;
-import java.nio.*;
-import java.util.*;
-import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.nuklear.Nuklear.*;
-import static org.lwjgl.opengl.GL30C.*;
-import static org.lwjgl.system.MemoryStack.*;
-import static org.lwjgl.system.MemoryUtil.*;
 
+import Menu.Menu;
+import imgui.ImGui;
+import imgui.ImGuiIO;
+import imgui.callback.ImStrConsumer;
+import imgui.callback.ImStrSupplier;
+import imgui.flag.*;
+import imgui.gl3.ImGuiImplGl3;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.lwjgl.glfw.GLFW.*;
 
 public class GUI {
-  //Singleton
-  private static GUI GUI = null;
 
-  private NkContext
-  ctx = NkContext.create(); // Create a Nuklear context, it is used everywhere.
-  private NkUserFont
-  default_font = NkUserFont.create(); // This is the Nuklear font object used for rendering text.
+  private static long windowPID;
 
-  private NkBuffer
-  cmds = NkBuffer.create(); // Stores a list of drawing commands that will be passed to OpenGL to render the interface.
-  private NkDrawNullTexture
-  null_texture = NkDrawNullTexture.create(); // An empty texture used for drawing.
-
-
-  private static final int BUFFER_INITIAL_SIZE = 4 * 1024;
-
-  private static final int MAX_VERTEX_BUFFER  = 512 * 1024;
-  private static final int MAX_ELEMENT_BUFFER = 128 * 1024;
-
-  private static final NkAllocator ALLOCATOR;
-
-  private static final NkDrawVertexLayoutElement.Buffer VERTEX_LAYOUT;
-
-  static {
-    ALLOCATOR = NkAllocator.create()
-    .alloc((handle, old, size) -> nmemAllocChecked(size))
-    .mfree((handle, ptr) -> nmemFree(ptr));
-
-    VERTEX_LAYOUT = NkDrawVertexLayoutElement.create(4)
-    .position(0).attribute(NK_VERTEX_POSITION).format(NK_FORMAT_FLOAT).offset(0)
-    .position(1).attribute(NK_VERTEX_TEXCOORD).format(NK_FORMAT_FLOAT).offset(8)
-    .position(2).attribute(NK_VERTEX_COLOR).format(NK_FORMAT_R8G8B8A8).offset(16)
-    .position(3).attribute(NK_VERTEX_ATTRIBUTE_COUNT).format(NK_FORMAT_COUNT).offset(0)
-    .flip();
+  private static long[] mouseCursors = new long[ImGuiMouseCursor.COUNT];
+  private static final ImGuiImplGl3 imGuiGl3 = new ImGuiImplGl3();
+  private static List<Menu> menuList = new ArrayList<Menu>();
+  private static void updateMouse(){
+    final int imguiCursor = ImGui.getMouseCursor();
+    glfwSetCursor(windowPID, mouseCursors[imguiCursor]);
+    glfwSetInputMode(windowPID, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
   }
 
-  private int vbo, vao, ebo;
-  private int prog;
-  private int vert_shdr;
-  private int frag_shdr;
-  private int uniform_tex;
-  private int uniform_proj;
+  public static void init(){
+    windowPID = Window.getInstance().getwindowPID();
+    GUI.initImGui();
 
-  public static GUI getInstance() {
-    if(GUI == null){
-      GUI = new GUI();
-    }
-
-    return GUI;
   }
 
-  public NkContext setupWindow(long win) {
-    glfwSetScrollCallback(win, (window, xoffset, yoffset) -> {
-      try (MemoryStack stack = stackPush()) {
-        NkVec2 scroll = NkVec2.mallocStack(stack)
-        .x((float)xoffset)
-        .y((float)yoffset);
-        nk_input_scroll(ctx, scroll);
+  public static void destroy() {
+    imGuiGl3.dispose();
+    ImGui.destroyContext();
+  }
+
+  static private void initImGui() {
+    // IMPORTANT!!
+    // This line is critical for Dear ImGui to work.
+    ImGui.createContext();
+
+    // ImGui provides 3 different color schemas for styling. We will use the classic one here.
+    // Try others with ImGui.styleColors*() methods.
+    ImGui.styleColorsClassic();
+
+    // Initialize ImGuiIO config
+    final ImGuiIO io = ImGui.getIO();
+
+    io.setIniFilename(null); // We don't want to save .ini file
+    io.setConfigFlags(ImGuiConfigFlags.NavEnableKeyboard); // Navigation with keyboard
+    io.setBackendFlags(ImGuiBackendFlags.HasMouseCursors); // Mouse cursors to display while resizing windows etc.
+    io.setBackendPlatformName("imgui_java_impl_glfw"); // For clarity reasons
+    io.setBackendRendererName("imgui_java_impl_lwjgl"); // For clarity reasons
+
+    // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
+    final int[] keyMap = new int[ImGuiKey.COUNT];
+    keyMap[ImGuiKey.Tab] = GLFW_KEY_TAB;
+    keyMap[ImGuiKey.LeftArrow] = GLFW_KEY_LEFT;
+    keyMap[ImGuiKey.RightArrow] = GLFW_KEY_RIGHT;
+    keyMap[ImGuiKey.UpArrow] = GLFW_KEY_UP;
+    keyMap[ImGuiKey.DownArrow] = GLFW_KEY_DOWN;
+    keyMap[ImGuiKey.PageUp] = GLFW_KEY_PAGE_UP;
+    keyMap[ImGuiKey.PageDown] = GLFW_KEY_PAGE_DOWN;
+    keyMap[ImGuiKey.Home] = GLFW_KEY_HOME;
+    keyMap[ImGuiKey.End] = GLFW_KEY_END;
+    keyMap[ImGuiKey.Insert] = GLFW_KEY_INSERT;
+    keyMap[ImGuiKey.Delete] = GLFW_KEY_DELETE;
+    keyMap[ImGuiKey.Backspace] = GLFW_KEY_BACKSPACE;
+    keyMap[ImGuiKey.Space] = GLFW_KEY_SPACE;
+    keyMap[ImGuiKey.Enter] = GLFW_KEY_ENTER;
+    keyMap[ImGuiKey.Escape] = GLFW_KEY_ESCAPE;
+    keyMap[ImGuiKey.KeyPadEnter] = GLFW_KEY_KP_ENTER;
+    keyMap[ImGuiKey.A] = GLFW_KEY_A;
+    keyMap[ImGuiKey.C] = GLFW_KEY_C;
+    keyMap[ImGuiKey.V] = GLFW_KEY_V;
+    keyMap[ImGuiKey.X] = GLFW_KEY_X;
+    keyMap[ImGuiKey.Y] = GLFW_KEY_Y;
+    keyMap[ImGuiKey.Z] = GLFW_KEY_Z;
+    io.setKeyMap(keyMap);
+
+    // Mouse cursors mapping
+    mouseCursors[ImGuiMouseCursor.Arrow] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    mouseCursors[ImGuiMouseCursor.TextInput] = glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+    mouseCursors[ImGuiMouseCursor.ResizeAll] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    mouseCursors[ImGuiMouseCursor.ResizeNS] = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+    mouseCursors[ImGuiMouseCursor.ResizeEW] = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+    mouseCursors[ImGuiMouseCursor.ResizeNESW] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    mouseCursors[ImGuiMouseCursor.ResizeNWSE] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    mouseCursors[ImGuiMouseCursor.Hand] = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+    mouseCursors[ImGuiMouseCursor.NotAllowed] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+
+    // ------------------------------------------------------------
+    // Here goes GLFW callbacks to update user input in Dear ImGui
+
+    glfwSetKeyCallback(windowPID, (w, key, scancode, action, mods) -> {
+      if (action == GLFW_PRESS) {
+        io.setKeysDown(key, true);
+      } else if (action == GLFW_RELEASE) {
+        io.setKeysDown(key, false);
       }
+
+      io.setKeyCtrl(io.getKeysDown(GLFW_KEY_LEFT_CONTROL) || io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
+      io.setKeyShift(io.getKeysDown(GLFW_KEY_LEFT_SHIFT) || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
+      io.setKeyAlt(io.getKeysDown(GLFW_KEY_LEFT_ALT) || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
+      io.setKeySuper(io.getKeysDown(GLFW_KEY_LEFT_SUPER) || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
     });
-    glfwSetCharCallback(win, (window, codepoint) -> nk_input_unicode(ctx, codepoint));
-    glfwSetKeyCallback(win, (window, key, scancode, action, mods) -> {
-      boolean press = action == GLFW_PRESS;
-      switch (key) {
-        case GLFW_KEY_ESCAPE:
-          glfwSetWindowShouldClose(window, true);
-          break;
-        case GLFW_KEY_DELETE:
-          nk_input_key(ctx, NK_KEY_DEL, press);
-          break;
-        case GLFW_KEY_ENTER:
-          nk_input_key(ctx, NK_KEY_ENTER, press);
-          break;
-        case GLFW_KEY_TAB:
-          nk_input_key(ctx, NK_KEY_TAB, press);
-          break;
-        case GLFW_KEY_BACKSPACE:
-          nk_input_key(ctx, NK_KEY_BACKSPACE, press);
-          break;
-        case GLFW_KEY_UP:
-          nk_input_key(ctx, NK_KEY_UP, press);
-          break;
-        case GLFW_KEY_DOWN:
-          nk_input_key(ctx, NK_KEY_DOWN, press);
-          break;
-        case GLFW_KEY_HOME:
-          nk_input_key(ctx, NK_KEY_TEXT_START, press);
-          nk_input_key(ctx, NK_KEY_SCROLL_START, press);
-          break;
-        case GLFW_KEY_END:
-          nk_input_key(ctx, NK_KEY_TEXT_END, press);
-          nk_input_key(ctx, NK_KEY_SCROLL_END, press);
-          break;
-        case GLFW_KEY_PAGE_DOWN:
-          nk_input_key(ctx, NK_KEY_SCROLL_DOWN, press);
-          break;
-        case GLFW_KEY_PAGE_UP:
-          nk_input_key(ctx, NK_KEY_SCROLL_UP, press);
-          break;
-        case GLFW_KEY_LEFT_SHIFT:
-        case GLFW_KEY_RIGHT_SHIFT:
-          nk_input_key(ctx, NK_KEY_SHIFT, press);
-          break;
-        case GLFW_KEY_LEFT_CONTROL:
-        case GLFW_KEY_RIGHT_CONTROL:
-          if (press) {
-            nk_input_key(ctx, NK_KEY_COPY, glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_PASTE, glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_CUT, glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_UNDO, glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_REDO, glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_WORD_LEFT, glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_WORD_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_LINE_START, glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_TEXT_LINE_END, glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS);
-          } else {
-            nk_input_key(ctx, NK_KEY_LEFT, glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_RIGHT, glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
-            nk_input_key(ctx, NK_KEY_COPY, false);
-            nk_input_key(ctx, NK_KEY_PASTE, false);
-            nk_input_key(ctx, NK_KEY_CUT, false);
-            nk_input_key(ctx, NK_KEY_SHIFT, false);
-          }
-          break;
-      }
-    });
-    glfwSetCursorPosCallback(win, (window, xpos, ypos) -> nk_input_motion(ctx, (int)xpos, (int)ypos));
-    glfwSetMouseButtonCallback(win, (window, button, action, mods) -> {
-      try (MemoryStack stack = stackPush()) {
-        DoubleBuffer cx = stack.mallocDouble(1);
-        DoubleBuffer cy = stack.mallocDouble(1);
 
-        glfwGetCursorPos(window, cx, cy);
-
-        int x = (int)cx.get(0);
-        int y = (int)cy.get(0);
-
-        int nkButton;
-        switch (button) {
-          case GLFW_MOUSE_BUTTON_RIGHT:
-            nkButton = NK_BUTTON_RIGHT;
-            break;
-          case GLFW_MOUSE_BUTTON_MIDDLE:
-            nkButton = NK_BUTTON_MIDDLE;
-            break;
-          default:
-            nkButton = NK_BUTTON_LEFT;
-        }
-        nk_input_button(ctx, nkButton, x, y, action == GLFW_PRESS);
+    glfwSetCharCallback(windowPID, (w, c) -> {
+      if (c != GLFW_KEY_DELETE) {
+        io.addInputCharacter(c);
       }
     });
 
-    nk_init(ctx, ALLOCATOR, null);
-    ctx.clip()
-    .copy((handle, text, len) -> {
-      if (len == 0) {
-        return;
-      }
+    glfwSetMouseButtonCallback(windowPID, (w, button, action, mods) -> {
+      final boolean[] mouseDown = new boolean[5];
 
-      try (MemoryStack stack = stackPush()) {
-        ByteBuffer str = stack.malloc(len + 1);
-        memCopy(text, memAddress(str), len);
-        str.put(len, (byte)0);
+      mouseDown[0] = button == GLFW_MOUSE_BUTTON_1 && action != GLFW_RELEASE;
+      mouseDown[1] = button == GLFW_MOUSE_BUTTON_2 && action != GLFW_RELEASE;
+      mouseDown[2] = button == GLFW_MOUSE_BUTTON_3 && action != GLFW_RELEASE;
+      mouseDown[3] = button == GLFW_MOUSE_BUTTON_4 && action != GLFW_RELEASE;
+      mouseDown[4] = button == GLFW_MOUSE_BUTTON_5 && action != GLFW_RELEASE;
 
-        glfwSetClipboardString(win, str);
-      }
-    })
-    .paste((handle, edit) -> {
-      long text = nglfwGetClipboardString(win);
-      if (text != NULL) {
-        nnk_textedit_paste(edit, text, nnk_strlen(text));
+      io.setMouseDown(mouseDown);
+
+      if (!io.getWantCaptureMouse() && mouseDown[1]) {
+        ImGui.setWindowFocus(null);
       }
     });
 
-    setupContext();
-    return ctx;
-  }
+    glfwSetScrollCallback(windowPID, (w, xOffset, yOffset) -> {
+      io.setMouseWheelH(io.getMouseWheelH() + (float) xOffset);
+      io.setMouseWheel(io.getMouseWheel() + (float) yOffset);
+    });
 
-
-  private void setupContext() {
-    String NK_SHADER_VERSION = Platform.get() == Platform.MACOSX ? "#version 150\n" : "#version 300 es\n";
-    String vertex_shader =
-    NK_SHADER_VERSION +
-    "uniform mat4 ProjMtx;\n" +
-    "in vec2 Position;\n" +
-    "in vec2 TexCoord;\n" +
-    "in vec4 Color;\n" +
-    "out vec2 Frag_UV;\n" +
-    "out vec4 Frag_Color;\n" +
-    "void main() {\n" +
-    "   Frag_UV = TexCoord;\n" +
-    "   Frag_Color = Color;\n" +
-    "   gl_Position = ProjMtx * vec4(Position.xy, 0, 1);\n" +
-    "}\n";
-    String fragment_shader =
-    NK_SHADER_VERSION +
-    "precision mediump float;\n" +
-    "uniform sampler2D Texture;\n" +
-    "in vec2 Frag_UV;\n" +
-    "in vec4 Frag_Color;\n" +
-    "out vec4 Out_Color;\n" +
-    "void main(){\n" +
-    "   Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n" +
-    "}\n";
-
-    nk_buffer_init(cmds, ALLOCATOR, BUFFER_INITIAL_SIZE);
-    prog = glCreateProgram();
-    vert_shdr = glCreateShader(GL_VERTEX_SHADER);
-    frag_shdr = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(vert_shdr, vertex_shader);
-    glShaderSource(frag_shdr, fragment_shader);
-    glCompileShader(vert_shdr);
-    glCompileShader(frag_shdr);
-    if (glGetShaderi(vert_shdr, GL_COMPILE_STATUS) != GL_TRUE) {
-      throw new IllegalStateException();
-    }
-    if (glGetShaderi(frag_shdr, GL_COMPILE_STATUS) != GL_TRUE) {
-      throw new IllegalStateException();
-    }
-    glAttachShader(prog, vert_shdr);
-    glAttachShader(prog, frag_shdr);
-    glLinkProgram(prog);
-    if (glGetProgrami(prog, GL_LINK_STATUS) != GL_TRUE) {
-      throw new IllegalStateException();
-    }
-
-    uniform_tex = glGetUniformLocation(prog, "Texture");
-    uniform_proj = glGetUniformLocation(prog, "ProjMtx");
-    int attrib_pos = glGetAttribLocation(prog, "Position");
-    int attrib_uv  = glGetAttribLocation(prog, "TexCoord");
-    int attrib_col = glGetAttribLocation(prog, "Color");
-
-    {
-      // buffer setup
-      vbo = glGenBuffers();
-      ebo = glGenBuffers();
-      vao = glGenVertexArrays();
-
-      glBindVertexArray(vao);
-      glBindBuffer(GL_ARRAY_BUFFER, vbo);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-
-      glEnableVertexAttribArray(attrib_pos);
-      glEnableVertexAttribArray(attrib_uv);
-      glEnableVertexAttribArray(attrib_col);
-
-      glVertexAttribPointer(attrib_pos, 2, GL_FLOAT, false, 20, 0);
-      glVertexAttribPointer(attrib_uv, 2, GL_FLOAT, false, 20, 8);
-      glVertexAttribPointer(attrib_col, 4, GL_UNSIGNED_BYTE, true, 20, 16);
-    }
-
-    {
-      // null texture setup
-      int nullTexID = glGenTextures();
-
-      null_texture.texture().id(nullTexID);
-      null_texture.uv().set(0.5f, 0.5f);
-
-      glBindTexture(GL_TEXTURE_2D, nullTexID);
-      try (MemoryStack stack = stackPush()) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, stack.ints(0xFFFFFFFF));
+    io.setSetClipboardTextFn(new ImStrConsumer() {
+      @Override
+      public void accept(final String s) {
+        glfwSetClipboardString(windowPID, s);
       }
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    }
+    });
 
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-  }
-
-
-  public void render() {
-    try (MemoryStack stack = stackPush()) {
-      // setup global state
-      glEnable(GL_BLEND);
-      glBlendEquation(GL_FUNC_ADD);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glDisable(GL_CULL_FACE);
-      glDisable(GL_DEPTH_TEST);
-      glEnable(GL_SCISSOR_TEST);
-      glActiveTexture(GL_TEXTURE0);
-
-      // setup program
-      glUseProgram(prog);
-      glUniform1i(uniform_tex, 0);
-      glUniformMatrix4fv(uniform_proj, false, stack.floats(
-      2.0f / Window.getInstance().getWidth(), 0.0f, 0.0f, 0.0f,
-      0.0f, -2.0f / Window.getInstance().getHeight(), 0.0f, 0.0f,
-      0.0f, 0.0f, -1.0f, 0.0f,
-      -1.0f, 1.0f, 0.0f, 1.0f
-      ));
-      glViewport(0, 0, Window.getInstance().getDisplay_Width(), Window.getInstance()
-      .getDisplay_Height());
-    }
-
-    {
-      // convert from command queue into draw list and draw to screen
-
-      // allocate vertex and element buffer
-      glBindVertexArray(vao);
-      glBindBuffer(GL_ARRAY_BUFFER, vbo);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-
-      glBufferData(GL_ARRAY_BUFFER, MAX_VERTEX_BUFFER, GL_STREAM_DRAW);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER, MAX_ELEMENT_BUFFER, GL_STREAM_DRAW);
-
-      // load draw vertices & elements directly into vertex + element buffer
-      ByteBuffer vertices = Objects.requireNonNull(glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY, MAX_VERTEX_BUFFER, null));
-      ByteBuffer elements = Objects.requireNonNull(glMapBuffer(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY, MAX_ELEMENT_BUFFER, null));
-      try (MemoryStack stack = stackPush()) {
-        // fill convert configuration
-        NkConvertConfig config = NkConvertConfig.callocStack(stack)
-        .vertex_layout(VERTEX_LAYOUT)
-        .vertex_size(20)
-        .vertex_alignment(4)
-        .null_texture(null_texture)
-        .circle_segment_count(22)
-        .curve_segment_count(22)
-        .arc_segment_count(22)
-        .global_alpha(1.0f)
-        .shape_AA(NK_ANTI_ALIASING_ON)
-        .line_AA(NK_ANTI_ALIASING_ON);
-
-        // setup buffers to load vertices and elements
-        NkBuffer vbuf = NkBuffer.mallocStack(stack);
-        NkBuffer ebuf = NkBuffer.mallocStack(stack);
-
-        nk_buffer_init_fixed(vbuf, vertices/*, max_vertex_buffer*/);
-        nk_buffer_init_fixed(ebuf, elements/*, max_element_buffer*/);
-        nk_convert(ctx, cmds, vbuf, ebuf, config);
+    io.setGetClipboardTextFn(new ImStrSupplier() {
+      @Override
+      public String get() {
+        return glfwGetClipboardString(windowPID);
       }
-      glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
-      glUnmapBuffer(GL_ARRAY_BUFFER);
+    });
 
-      // iterate over and execute each draw command
-      float fb_scale_x =
-      (float)Window.getInstance().getDisplay_Width() / (float)Window.getInstance().getDisplay_Width();
-      float fb_scale_y =
-      (float)Window.getInstance().getHeight() / (float)Window.getInstance().getDisplay_Height();
+    //LoadFont(io);
 
-      long offset = NULL;
-      for (NkDrawCommand cmd = nk__draw_begin(ctx, cmds); cmd != null; cmd = nk__draw_next(cmd, cmds, ctx)) {
-        if (cmd.elem_count() == 0) {
-          continue;
-        }
-        glBindTexture(GL_TEXTURE_2D, cmd.texture().id());
-        glScissor(
-        (int)(cmd.clip_rect().x() * fb_scale_x),
-        (int)((Window.getInstance().getHeight()  - (int)(cmd.clip_rect().y() + cmd.clip_rect().h())) * fb_scale_y),
-        (int)(cmd.clip_rect().w() * fb_scale_x),
-        (int)(cmd.clip_rect().h() * fb_scale_y)
-        );
-        glDrawElements(GL_TRIANGLES, cmd.elem_count(), GL_UNSIGNED_SHORT, offset);
-        offset += cmd.elem_count() * 2;
-      }
-      nk_clear(ctx);
-      nk_buffer_clear(cmds);
+    // IMPORTANT!!!
+    // Method initializes renderer itself.
+    // This method SHOULD be called after you've initialized your ImGui configuration (fonts and so on).
+    // ImGui context should be created as well.
+    imGuiGl3.init();
+  }
+
+  public static void update(int[] winWidth, int[] winHeight, int[] fbWidth,
+  int[]fbHeight, double[] mousePosX,double[] mousePosY,double deltaTime ) {
+    final ImGuiIO io = ImGui.getIO();
+    io.setDisplaySize(winWidth[0], winHeight[0]);
+    io.setDisplayFramebufferScale((float) fbWidth[0] / winWidth[0], (float) fbHeight[0] / winHeight[0]);
+    io.setMousePos((float) mousePosX[0], (float) mousePosY[0]);
+    io.setDeltaTime((float) deltaTime);
+
+    GUI.updateMouse();
+    GUI.render();
+  }
+
+  public static void add(Menu menu) {
+    menuList.add(menu);
+  }
+
+  private void LoadFont (ImGuiIO io) {
+    // ------------------------------------------------------------
+    // Fonts configuration
+
+    // -------------------
+    // Fonts merge example
+/**
+    final ImFontAtlas fontAtlas = io.getFonts();
+
+    // First of all we add a default font, which is 'ProggyClean.ttf, 13px'
+    fontAtlas.addFontDefault();
+
+    final ImFontConfig fontConfig = new ImFontConfig(); // Keep in mind that creation of the ImFontConfig will allocate native memory
+    fontConfig.setMergeMode(true); // All fonts added while this mode is turned on will be merged with the previously added font
+    fontConfig.setPixelSnapH(true);
+    fontConfig.setGlyphRanges(fontAtlas.getGlyphRangesCyrillic()); // Additional glyphs could be added like this or in addFontFrom*() methods
+
+    // We merge font loaded from resources with the default one. Thus we will get an absent cyrillic glyphs
+    //fontAtlas.addFontFromMemoryTTF(loadFromResources("basis33.ttf"), 16,
+    fontConfig);
+
+    // Disable merged mode and add all other fonts normally
+    fontConfig.setMergeMode(false);
+    fontConfig.setPixelSnapH(false);
+
+    // ------------------------------
+    // Fonts from file/memory example
+
+    fontConfig.setRasterizerMultiply(1.2f); // This will make fonts a bit more readable
+
+    // We can add new fonts directly from file
+    fontAtlas.addFontFromFileTTF("src/test/resources/DroidSans.ttf", 13, fontConfig);
+    fontAtlas.addFontFromFileTTF("src/test/resources/DroidSans.ttf", 14, fontConfig);
+
+    // Or directly from memory
+    fontConfig.setName("Roboto-Regular.ttf, 13px"); // This name will be displayed in Style Editor
+    fontAtlas.addFontFromMemoryTTF(loadFromResources("Roboto-Regular.ttf"),
+    13, fontConfig);
+    fontConfig.setName("Roboto-Regular.ttf, 14px"); // We can apply a new config value every time we add a new font
+    fontAtlas.addFontFromMemoryTTF(loadFromResources("Roboto-Regular.ttf"),
+    14, fontConfig);
+
+    fontConfig.destroy(); // After all fonts were added we don't need this config more
+ **/
+  }
+
+
+  public static void render() {
+
+    // IMPORTANT!!
+    // Any Dear ImGui code SHOULD go between NewFrame()/Render() methods
+    ImGui.newFrame();
+    showUi();
+    ImGui.render();
+
+    // After ImGui#render call we provide draw data into LWJGL3 renderer.
+    // At that moment ImGui will be rendered to the current OpenGL context.
+    imGuiGl3.renderDrawData(ImGui.getDrawData());
+
+  }
+
+  private static void showUi() {
+
+    for (Menu menu:menuList){
+      menu.showUI();
     }
-
-    // default OpenGL state
-    glUseProgram(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glDisable(GL_BLEND);
-    glDisable(GL_SCISSOR_TEST);
   }
-
-  public void input(long win){
-    nk_input_begin(ctx);
-
-    glfwPollEvents();
-
-    NkMouse mouse = ctx.input().mouse();
-    if (mouse.grab()) {
-      glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-    } else if (mouse.grabbed()) {
-      float prevX = mouse.prev().x();
-      float prevY = mouse.prev().y();
-      glfwSetCursorPos(win, prevX, prevY);
-      mouse.pos().x(prevX);
-      mouse.pos().y(prevY);
-    } else if (mouse.ungrab()) {
-      glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }
-
-    nk_input_end(ctx);
-
-  }
-
-  public NkContext get_context(){
-    return ctx;
-  }
-
 }

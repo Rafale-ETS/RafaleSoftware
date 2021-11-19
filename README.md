@@ -15,6 +15,10 @@ Simply import the files to your IDE and setup gradle with the provided build.gra
 
 ### V0.1
 - [x] Generate the window
-- [ ] Generate the GUI
-- [ ] Abstract the GUI for easy manipulation
+- [x] Generate the GUI
+- [x] Abstract the GUI for easy manipulation
+
+### V0.2
+- [ ] View and manipulate the map
+- [ ] Create Classes to handle positions data and prepare for data  handeling and representation
 
