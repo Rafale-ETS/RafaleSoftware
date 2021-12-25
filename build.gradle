@@ -15,7 +15,12 @@ repositories {
 }
 
 dependencies {
-    implementation "io.github.spair:imgui-java-app:$imguiVersion"
+
+    implementation files('jars/worldwind.jar')
+    implementation group: 'org.jogamp.gluegen', name: 'gluegen-rt-main', version:'2.3.2'
+    implementation group: 'org.jogamp.jogl', name: 'jogl-all-main', version:'2.3.2'
+
+    implementation"io.github.spair:imgui-java-app:$imguiVersion"
 
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
     implementation "org.lwjgl:lwjgl-stb:$lwjglVersion"

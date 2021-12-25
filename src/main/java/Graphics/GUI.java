@@ -27,7 +27,7 @@ public class GUI {
   }
 
   public static void init(){
-    windowPID = Window.getInstance().getwindowPID();
+    //windowPID = Window.getInstance().getwindowPID();
     GUI.initImGui();
 
   }
