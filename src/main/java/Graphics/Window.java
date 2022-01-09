@@ -1,10 +1,6 @@
 package Graphics;
 
-import java.awt.EventQueue;
 import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.border.EmptyBorder;
-import java.awt.FlowLayout;
 import javax.swing.JMenuBar;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -24,9 +20,6 @@ public class Window extends JFrame {
 
     return window;
   }
-
-    private JPanel contentPane;
-
     /**
      * Create the frame.
      */
@@ -51,13 +44,10 @@ public class Window extends JFrame {
 
       JCheckBoxMenuItem checkBoxMenuItem = new JCheckBoxMenuItem("New check item");
       mnNewMenu.add(checkBoxMenuItem);
-      contentPane = new JPanel();
-      contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
-      setContentPane(contentPane);
-      contentPane.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
 
       this.getContentPane().add(new Map());
       this.show();
+
     }
 
   }
